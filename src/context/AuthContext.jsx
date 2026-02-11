@@ -1,58 +1,110 @@
-import { createContext, useContext, useState, useEffect } from "react";
-import api from "../utils/api";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { authAPI, userAPI } from "../utils/api";
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+  return context;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem("darkMode") === "true";
+  });
 
-  // Auto load logged in user on app refresh
+  // Dark mode effect
   useEffect(() => {
-    const loadUser = async () => {
-      const token = localStorage.getItem("token");
+    if (darkMode) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    localStorage.setItem("darkMode", darkMode);
+  }, [darkMode]);
+
+  const toggleDarkMode = () => setDarkMode((prev) => !prev);
+
+  // Load user on mount
+  const loadUser = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("accessToken");
       if (!token) {
         setLoading(false);
         return;
       }
-
-      try {
-        const res = await api.get("/auth/me");
-        setUser(res.data);
-      } catch (err) {
-        localStorage.removeItem("token");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadUser();
+      const res = await userAPI.getMe();
+      setUser(res.data.user || res.data);
+    } catch (error) {
+      console.error("Failed to load user:", error);
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
+
+  // Register
+  const register = async (username, email, password) => {
+    const res = await authAPI.register({ username, email, password });
+    if (res.data.success) {
+      localStorage.setItem("accessToken", res.data.accessToken);
+      localStorage.setItem("refreshToken", res.data.refreshToken);
+      setUser(res.data.user);
+      return res.data;
+    } else {
+      throw new Error(res.data.message || "Registration failed");
+    }
+  };
+
+  // Login
   const login = async (email, password) => {
-    const res = await api.post("/auth/login", { email, password });
-    localStorage.setItem("token", res.data.token);
-    setUser(res.data.user);
-    return res.data;
+    const res = await authAPI.login({ email, password });
+    if (res.data.success) {
+      localStorage.setItem("accessToken", res.data.accessToken);
+      localStorage.setItem("refreshToken", res.data.refreshToken);
+      setUser(res.data.user);
+      return res.data;
+    } else {
+      throw new Error(res.data.message || "Login failed");
+    }
   };
 
-  const register = async (name, email, password) => {
-    const res = await api.post("/auth/register", { name, email, password });
-    localStorage.setItem("token", res.data.token);
-    setUser(res.data.user);
-    return res.data;
-  };
-
+  // Logout
   const logout = () => {
-    localStorage.removeItem("token");
+    authAPI.logout().catch(() => {});
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
     setUser(null);
   };
 
-  return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const updateUser = (updatedUser) => {
+    setUser(updatedUser);
+  };
+
+  const value = {
+    user,
+    loading,
+    darkMode,
+    login,
+    register,
+    logout,
+    updateUser,
+    toggleDarkMode,
+    loadUser,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = () => useContext(AuthContext);
+export default AuthContext;
