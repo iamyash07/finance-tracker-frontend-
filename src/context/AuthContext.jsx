@@ -18,7 +18,6 @@ export const AuthProvider = ({ children }) => {
     return localStorage.getItem("darkMode") === "true";
   });
 
-  // Dark mode effect
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add("dark");
@@ -30,7 +29,6 @@ export const AuthProvider = ({ children }) => {
 
   const toggleDarkMode = () => setDarkMode((prev) => !prev);
 
-  // Load user on mount
   const loadUser = useCallback(async () => {
     try {
       const token = localStorage.getItem("accessToken");
@@ -38,8 +36,11 @@ export const AuthProvider = ({ children }) => {
         setLoading(false);
         return;
       }
+      // Fetch full user data including avatar
       const res = await userAPI.getMe();
-      setUser(res.data.user || res.data);
+      const userData = res.data.user || res.data;
+      console.log("LOADED USER:", userData);
+      setUser(userData);
     } catch (error) {
       console.error("Failed to load user:", error);
       localStorage.removeItem("accessToken");
@@ -54,33 +55,40 @@ export const AuthProvider = ({ children }) => {
     loadUser();
   }, [loadUser]);
 
-  // Register
   const register = async (username, email, password) => {
     const res = await authAPI.register({ username, email, password });
     if (res.data.success) {
       localStorage.setItem("accessToken", res.data.accessToken);
       localStorage.setItem("refreshToken", res.data.refreshToken);
-      setUser(res.data.user);
+
+      // Fetch full user data (includes avatar, createdAt, etc.)
+      const userRes = await userAPI.getMe();
+      const fullUser = userRes.data.user || userRes.data;
+      setUser(fullUser);
+
       return res.data;
     } else {
       throw new Error(res.data.message || "Registration failed");
     }
   };
 
-  // Login
   const login = async (email, password) => {
     const res = await authAPI.login({ email, password });
     if (res.data.success) {
       localStorage.setItem("accessToken", res.data.accessToken);
       localStorage.setItem("refreshToken", res.data.refreshToken);
-      setUser(res.data.user);
+
+      // Fetch full user data (includes avatar, createdAt, etc.)
+      const userRes = await userAPI.getMe();
+      const fullUser = userRes.data.user || userRes.data;
+      setUser(fullUser);
+
       return res.data;
     } else {
       throw new Error(res.data.message || "Login failed");
     }
   };
 
-  // Logout
   const logout = () => {
     authAPI.logout().catch(() => {});
     localStorage.removeItem("accessToken");
