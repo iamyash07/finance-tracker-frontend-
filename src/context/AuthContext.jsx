@@ -39,7 +39,6 @@ export const AuthProvider = ({ children }) => {
       // Fetch full user data including avatar
       const res = await userAPI.getMe();
       const userData = res.data.user || res.data;
-      console.log("LOADED USER:", userData);
       setUser(userData);
     } catch (error) {
       console.error("Failed to load user:", error);
